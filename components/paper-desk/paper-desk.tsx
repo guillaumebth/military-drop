@@ -558,7 +558,7 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
               {/* La feuille */}
               <div
                 data-paper
-                className="pointer-events-auto absolute top-0 left-0 cursor-grab touch-none overflow-hidden bg-white will-change-transform group-data-[dragging=true]/desk:cursor-grabbing"
+                className="pointer-events-auto absolute top-0 left-0 touch-none overflow-hidden bg-white will-change-transform"
                 style={{
                   width: cover.w,
                   height: cover.h,

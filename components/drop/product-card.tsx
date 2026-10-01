@@ -64,7 +64,7 @@ export function ProductCard({ name, price, left }: ProductCardProps) {
         type="button"
         data-square
         aria-label={`View product: ${name}`}
-        className="relative block size-[300px] cursor-pointer overflow-hidden bg-placeholder"
+        className="relative block size-[300px] overflow-hidden bg-placeholder"
       >
         <span
           ref={tagRef}

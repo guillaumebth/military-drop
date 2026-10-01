@@ -132,3 +132,10 @@
     @apply font-sans;
     }
 }
+/* Curseur drapeau de l'Ukraine sur tout le site (pointe = coin haut gauche) */
+@layer base {
+  *,
+  html {
+    cursor: url("/cursor.svg") 0 0, auto;
+  }
+}
