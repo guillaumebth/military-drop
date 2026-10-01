@@ -10,7 +10,7 @@ type ProductCardProps = {
   left: number
 }
 
-const label = "absolute top-[308px] -translate-x-1/2 font-display text-[10px] leading-none text-black uppercase whitespace-nowrap"
+const label = "absolute top-[308px] font-display text-[10px] leading-none text-black uppercase whitespace-nowrap"
 
 // Carte produit : au survol, l'étiquette « View product » apparaît d'un coup et suit la souris.
 export function ProductCard({ name, price, left }: ProductCardProps) {
@@ -74,8 +74,8 @@ export function ProductCard({ name, price, left }: ProductCardProps) {
           View product
         </span>
       </button>
-      <p className={`${label} left-[42px]`}>{name}</p>
-      <p className={`${label} left-[127px]`}>{price}</p>
+      <p className={`${label} left-0`}>{name}</p>
+      <p className={`${label} left-[115px]`}>{price}</p>
     </div>
   )
 }
