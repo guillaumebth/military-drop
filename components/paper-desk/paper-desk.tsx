@@ -46,6 +46,9 @@ type Sheet = {
   // départ au scroll : 0 = sur le bureau, 1 = sortie de l'écran
   leave: number
   leaveDelay: number
+  // décalage vers les bords de l'écran quand il est plus large/haut que la maquette
+  edgeX: number
+  edgeY: number
   fromX: number
   fromY: number
   fromR: number
@@ -101,6 +104,8 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
         intro: 0,
         leave: 0,
         leaveDelay: Math.random() * 0.35,
+        edgeX: 0,
+        edgeY: 0,
         ...(() => {
           const dx = c.x - DESK_WIDTH / 2
           const dy = c.y - DESK_HEIGHT / 2
@@ -145,12 +150,28 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
       let scale = 1
       let offsetX = 0
       let offsetY = 0
+      // Le contenu est toujours visible en entier (centré). S'il reste de la place
+      // sur les côtés ou en haut/bas, les feuilles s'écartent pour rester collées aux bords.
+      let marginX = 0
+      let marginY = 0
       const fit = () => {
         const { width, height } = root.getBoundingClientRect()
-        scale = Math.max(width / DESK_WIDTH, height / DESK_HEIGHT)
+        scale = Math.min(width / DESK_WIDTH, height / DESK_HEIGHT)
         offsetX = (width - DESK_WIDTH * scale) / 2
         offsetY = (height - DESK_HEIGHT * scale) / 2
         stage.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`
+
+        marginX = offsetX / scale
+        marginY = offsetY / scale
+        sheets.forEach((s, i) => {
+          const c = covers[i]
+          const edgeX = marginX * clamp((c.x - DESK_WIDTH / 2) / (DESK_WIDTH / 4), -1, 1)
+          const edgeY = marginY * clamp((c.y - DESK_HEIGHT / 2) / (DESK_HEIGHT / 4), -1, 1)
+          s.hx += edgeX - s.edgeX
+          s.hy += edgeY - s.edgeY
+          s.edgeX = edgeX
+          s.edgeY = edgeY
+        })
       }
       fit()
       const resizeObserver = new ResizeObserver(fit)
@@ -286,8 +307,8 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
               s.hy += s.sy * dt
               s.sx *= Math.pow(SLIDE_FRICTION, dt)
               s.sy *= Math.pow(SLIDE_FRICTION, dt)
-              s.hx = clamp(s.hx, 0, DESK_WIDTH)
-              s.hy = clamp(s.hy, 0, DESK_HEIGHT)
+              s.hx = clamp(s.hx, -marginX, DESK_WIDTH + marginX)
+              s.hy = clamp(s.hy, -marginY, DESK_HEIGHT + marginY)
               if (Math.hypot(s.sx, s.sy) < 0.05) s.sliding = false
             }
 
