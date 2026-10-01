@@ -30,7 +30,7 @@ export function DropPage() {
       <h1 data-reveal="title" className="absolute top-[94.03px] left-[719.68px] -translate-x-1/2 text-center font-display text-[120px] leading-none whitespace-nowrap text-black uppercase">
         Did the war end
         <br />
-        or did we scroll?
+        or did we scroll
       </h1>
 
       {/* Produits */}
