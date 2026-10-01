@@ -4,7 +4,7 @@ import { useRef } from "react"
 import Image from "next/image"
 
 import { gsap, SplitText, useGSAP } from "@/lib/gsap"
-import { covers, DESK_HEIGHT, DESK_WIDTH } from "./covers"
+import { covers, LAYOUTS, MOBILE_BREAKPOINT, type Layout } from "./covers"
 
 // ─── Réglages de la physique ────────────────────────────────────────────────
 // Tout le « ressenti » du papier se règle ici.
@@ -100,26 +100,52 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
         sx: 0,
         sy: 0,
         sliding: false,
-        // chaque feuille arrive de l'extérieur, dans la direction de son bord
         intro: 0,
         leave: 0,
         leaveDelay: Math.random() * 0.35,
         edgeX: 0,
         edgeY: 0,
-        ...(() => {
-          const dx = c.x - DESK_WIDTH / 2
-          const dy = c.y - DESK_HEIGHT / 2
-          const len = Math.hypot(dx, dy) || 1
-          const distance = 650 + Math.random() * 250
-          return {
-            fromX: (dx / len) * distance,
-            fromY: (dy / len) * distance,
-            fromR: gsap.utils.random(-35, 35),
-          }
-        })(),
+        fromX: 0,
+        fromY: 0,
+        fromR: gsap.utils.random(-35, 35),
         w: c.w,
         h: c.h,
       }))
+
+      // ─── Mise en page : ordinateur ou mobile ───────────────────────────────
+      let layout: Layout = "desktop"
+      let frame = LAYOUTS.desktop
+      const basePlacement = (i: number) =>
+        layout === "mobile" ? covers[i].mobile : covers[i]
+
+      // Replace toutes les feuilles selon la mise en page choisie
+      const applyLayout = (next: Layout) => {
+        layout = next
+        frame = LAYOUTS[next]
+        stage.dataset.layout = next
+        stage.style.width = `${frame.width}px`
+        stage.style.height = `${frame.height}px`
+        sheets.forEach((s, i) => {
+          const place = basePlacement(i)
+          s.hx = place.x
+          s.hy = place.y
+          s.hr = place.rotation
+          s.ox = s.oy = s.or = s.vx = s.vy = s.vr = 0
+          s.sliding = false
+          s.edgeX = s.edgeY = 0
+          s.w = covers[i].w * frame.sheetScale
+          s.h = covers[i].h * frame.sheetScale
+          papers[i].style.width = shadows[i].style.width = `${s.w}px`
+          papers[i].style.height = shadows[i].style.height = `${s.h}px`
+          // chaque feuille arrive de l'extérieur, dans la direction de son bord
+          const dx = place.x - frame.width / 2
+          const dy = place.y - frame.height / 2
+          const len = Math.hypot(dx, dy) || 1
+          const distance = frame.width * (0.45 + Math.random() * 0.17)
+          s.fromX = (dx / len) * distance
+          s.fromY = (dy / len) * distance
+        })
+      }
 
       // Ordre d'empilement : index des feuilles du dessous vers le dessus
       const order = sheets.map((_, i) => i)
@@ -156,17 +182,19 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
       let marginY = 0
       const fit = () => {
         const { width, height } = root.getBoundingClientRect()
-        scale = Math.min(width / DESK_WIDTH, height / DESK_HEIGHT)
-        offsetX = (width - DESK_WIDTH * scale) / 2
-        offsetY = (height - DESK_HEIGHT * scale) / 2
+        const next: Layout = width < MOBILE_BREAKPOINT ? "mobile" : "desktop"
+        if (next !== layout || !stage.dataset.layout) applyLayout(next)
+        scale = Math.min(width / frame.width, height / frame.height)
+        offsetX = (width - frame.width * scale) / 2
+        offsetY = (height - frame.height * scale) / 2
         stage.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`
 
         marginX = offsetX / scale
         marginY = offsetY / scale
         sheets.forEach((s, i) => {
-          const c = covers[i]
-          const edgeX = marginX * clamp((c.x - DESK_WIDTH / 2) / (DESK_WIDTH / 4), -1, 1)
-          const edgeY = marginY * clamp((c.y - DESK_HEIGHT / 2) / (DESK_HEIGHT / 4), -1, 1)
+          const c = basePlacement(i)
+          const edgeX = marginX * clamp((c.x - frame.width / 2) / (frame.width / 4), -1, 1)
+          const edgeY = marginY * clamp((c.y - frame.height / 2) / (frame.height / 4), -1, 1)
           s.hx += edgeX - s.edgeX
           s.hy += edgeY - s.edgeY
           s.edgeX = edgeX
@@ -307,8 +335,8 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
               s.hy += s.sy * dt
               s.sx *= Math.pow(SLIDE_FRICTION, dt)
               s.sy *= Math.pow(SLIDE_FRICTION, dt)
-              s.hx = clamp(s.hx, -marginX, DESK_WIDTH + marginX)
-              s.hy = clamp(s.hy, -marginY, DESK_HEIGHT + marginY)
+              s.hx = clamp(s.hx, -marginX, frame.width + marginX)
+              s.hy = clamp(s.hy, -marginY, frame.height + marginY)
               if (Math.hypot(s.sx, s.sy) < 0.05) s.sliding = false
             }
 
@@ -432,19 +460,15 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
       // ─── Intro au chargement ───────────────────────────────────────────────
       // Le texte apparaît d'abord, puis les feuilles sont « lancées » sur le bureau.
       const intro = () => {
-        const title = stage.querySelector<HTMLElement>("[data-reveal=title]")
-        const header = gsap.utils.toArray<HTMLElement>(
-          "[data-reveal=header]",
-          stage
-        )
-        const squares = gsap.utils.toArray<HTMLElement>(
-          "[data-reveal=product] [data-square]",
-          stage
-        )
-        const productLabels = gsap.utils.toArray<HTMLElement>(
-          "[data-reveal=product] > p",
-          stage
-        )
+        // Seulement les éléments de la mise en page affichée (ordinateur ou mobile)
+        const visible = (selector: string) =>
+          gsap.utils
+            .toArray<HTMLElement>(selector, stage)
+            .filter((el) => el.offsetParent !== null)
+        const title = visible("[data-reveal=title]")[0]
+        const header = visible("[data-reveal=header]")
+        const squares = visible("[data-reveal=product] [data-square]")
+        const productLabels = visible("[data-reveal=product] > p")
         const content = stage.querySelector<HTMLElement>("[data-content]")
 
         if (reducedMotion) {
@@ -534,8 +558,8 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
       >
         <div
           ref={stageRef}
-          className="absolute top-0 left-0 origin-top-left"
-          style={{ width: DESK_WIDTH, height: DESK_HEIGHT, perspective: 2600 }}
+          className="group/stage absolute top-0 left-0 origin-top-left"
+          style={{ width: LAYOUTS.desktop.width, height: LAYOUTS.desktop.height, perspective: 2600 }}
         >
           {/* Contenu de la page, caché sous les feuilles (invisible jusqu'à l'intro) */}
           <div data-content className="invisible absolute inset-0">
@@ -558,7 +582,7 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
               {/* La feuille */}
               <div
                 data-paper
-                className="pointer-events-auto absolute top-0 left-0 touch-none overflow-hidden bg-white will-change-transform"
+                className="pointer-events-auto absolute top-0 left-0 touch-pan-y overflow-hidden bg-white will-change-transform"
                 style={{
                   width: cover.w,
                   height: cover.h,

@@ -8,12 +8,16 @@ type ProductCardProps = {
   name: string
   price: string
   left: number
+  top: number
+  size: number
+  // position du prix depuis le bord gauche de la carte
+  priceLeft: number
 }
 
-const label = "absolute top-[308px] font-display text-[10px] leading-none text-black uppercase whitespace-nowrap"
+const label = "absolute font-display text-[10px] leading-none text-black uppercase whitespace-nowrap"
 
 // Carte produit : au survol, l'étiquette « View product » apparaît d'un coup et suit la souris.
-export function ProductCard({ name, price, left }: ProductCardProps) {
+export function ProductCard({ name, price, left, top, size, priceLeft }: ProductCardProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   const squareRef = useRef<HTMLButtonElement>(null)
   const tagRef = useRef<HTMLSpanElement>(null)
@@ -28,7 +32,7 @@ export function ProductCard({ name, price, left }: ProductCardProps) {
       // et saute de case en case sur une grille de 8 px.
       const GRID = 8
       const snap = gsap.utils.snap(GRID)
-      gsap.set(tag, { xPercent: -50, yPercent: -50, x: 150, y: 150, autoAlpha: 0 })
+      gsap.set(tag, { xPercent: -50, yPercent: -50, x: size / 2, y: size / 2, autoAlpha: 0 })
       const place = (p: { x: number; y: number }) => gsap.set(tag, { x: snap(p.x), y: snap(p.y) })
 
       // Position de la souris dans la carte (la page est mise à l'échelle, on corrige)
@@ -58,13 +62,14 @@ export function ProductCard({ name, price, left }: ProductCardProps) {
   )
 
   return (
-    <div ref={rootRef} data-reveal="product" className="absolute top-[360px] w-[300px]" style={{ left }}>
+    <div ref={rootRef} data-reveal="product" className="absolute" style={{ left, top, width: size }}>
       <button
         ref={squareRef}
         type="button"
         data-square
         aria-label={`View product: ${name}`}
-        className="relative block size-[300px] overflow-hidden bg-placeholder"
+        className="relative block overflow-hidden bg-placeholder"
+        style={{ width: size, height: size }}
       >
         <span
           ref={tagRef}
@@ -74,8 +79,12 @@ export function ProductCard({ name, price, left }: ProductCardProps) {
           View product
         </span>
       </button>
-      <p className={`${label} left-0`}>{name}</p>
-      <p className={`${label} left-[115px]`}>{price}</p>
+      <p className={`${label} left-0`} style={{ top: size + 8 }}>
+        {name}
+      </p>
+      <p className={label} style={{ top: size + 8, left: priceLeft }}>
+        {price}
+      </p>
     </div>
   )
 }
