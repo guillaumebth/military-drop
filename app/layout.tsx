@@ -1,5 +1,4 @@
-import { Geist, Geist_Mono } from "next/font/google"
-import localFont from "next/font/local"
+import { Geist, Geist_Mono, Inter, Source_Serif_4 } from "next/font/google"
 
 import "./globals.css"
 import { Toaster } from "sonner"
@@ -9,11 +8,16 @@ import { cn } from "@/lib/utils";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'})
 
-// Police de titrage de la maquette (version d'essai « TRIAL » : licence à acheter avant la mise en ligne)
-const lockSans = localFont({
-  src: "./fonts/LockSansTRIAL-Bold.otf",
-  weight: "700",
-  variable: "--font-lock",
+// Textes de la maquette
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
+
+// Titre : la maquette utilise New York (police Apple, non diffusable sur le web).
+// Source Serif prend le relais sur les appareils où elle n'est pas installée (voir globals.css).
+const sourceSerif = Source_Serif_4({
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  weight: ["500", "700"],
+  variable: "--font-serif",
 })
 
 const fontMono = Geist_Mono({
@@ -30,7 +34,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("antialiased", fontMono.variable, "font-sans", geist.variable, lockSans.variable)}
+      className={cn("antialiased", fontMono.variable, "font-sans", geist.variable, inter.variable, sourceSerif.variable)}
     >
       <body>
         <ThemeProvider>

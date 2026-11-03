@@ -3,8 +3,10 @@
 import { useRef } from "react"
 import Image from "next/image"
 
-import { gsap, SplitText, useGSAP } from "@/lib/gsap"
-import { covers, LAYOUTS, MOBILE_BREAKPOINT, type Layout } from "./covers"
+import { gsap, useGSAP } from "@/lib/gsap"
+import { covers as allCovers, LAYOUTS, MOBILE_BREAKPOINT, SHOW_COVERS, type Layout } from "./covers"
+
+const covers = SHOW_COVERS ? allCovers : []
 
 // ─── Réglages de la physique ────────────────────────────────────────────────
 // Tout le « ressenti » du papier se règle ici.
@@ -18,6 +20,11 @@ const FLUTTER_DAMPING = 0.72 // amortissement du battement
 const MAX_TILT = 12 // inclinaison maxi d'un bord soulevé (degrés)
 const HOVER_PEEL = 5 // inclinaison quand on survole une feuille (degrés)
 const SLIDE_FRICTION = 0.92 // glissade d'une feuille lancée puis lâchée
+
+// ─── Drapeau de chargement ──────────────────────────────────────────────────
+const FLAG_MAX_WAIT = 4000 // attente maxi du brassard 3D avant d'ouvrir (millisecondes)
+const FLAG_DURATION = 1.1 // durée d'ouverture des deux bandes (secondes)
+const FLAG_CONTENT_DELAY = 0.55 // la page commence à apparaître après ce délai (secondes)
 
 type Sheet = {
   // place « au repos » (modifiée quand on déplace une feuille)
@@ -467,17 +474,27 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
             .filter((el) => el.offsetParent !== null)
         const title = visible("[data-reveal=title]")[0]
         const header = visible("[data-reveal=header]")
-        const squares = visible("[data-reveal=product] [data-square]")
-        const productLabels = visible("[data-reveal=product] > p")
+        const tagline = visible("[data-reveal=tagline]")
+        const cta = visible("[data-reveal=cta]")
         const content = stage.querySelector<HTMLElement>("[data-content]")
 
+        // Les deux bandes du drapeau s'écartent : le bleu monte, le jaune descend
+        const [flagBlue, flagYellow] = gsap.utils.toArray<HTMLElement>("[data-flag]", root)
+        const hideFlag = () => gsap.set([flagBlue, flagYellow], { display: "none" })
+
         if (reducedMotion) {
+          gsap.to([flagBlue, flagYellow], { autoAlpha: 0, duration: 0.4, onComplete: hideFlag })
           gsap.set(content, { autoAlpha: 1 })
-          gsap.to(sheets, { intro: 1, duration: 0.6, ease: "power1.out" })
+          if (sheets.length) gsap.to(sheets, { intro: 1, duration: 0.6, ease: "power1.out" })
           return
         }
 
-        const tl = gsap.timeline({ defaults: { ease: "expo.out" } })
+        gsap
+          .timeline({ defaults: { duration: FLAG_DURATION, ease: "expo.inOut" }, onComplete: hideFlag })
+          .to(flagBlue, { yPercent: -100 }, 0)
+          .to(flagYellow, { yPercent: 100 }, 0)
+
+        const tl = gsap.timeline({ defaults: { ease: "expo.out" }, delay: FLAG_CONTENT_DELAY })
         tl.set(content, { autoAlpha: 1 })
 
         // En-tête : chaque mot glisse vers le haut
@@ -487,38 +504,26 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
           0
         )
 
-        // Titre : les lettres montent une à une depuis un masque
+        // Titre : chaque ligne monte depuis son masque. Le texte reste un texte normal
+        // du début à la fin : aucun saut d'espacement quand l'animation se termine.
         if (title) {
-          const split = SplitText.create(title, {
-            type: "lines,chars",
-            mask: "lines",
-          })
           tl.from(
-            split.chars,
-            { yPercent: 110, rotate: 6, duration: 1.3, stagger: 0.022 },
+            title.querySelectorAll("[data-title-line]"),
+            { yPercent: 125, duration: 1.3, stagger: 0.14 },
             0.15
           )
         }
 
-        // Produits : le carré se dévoile de bas en haut, puis les légendes
+        // Accroche et bouton d'achat arrivent ensuite
         tl.from(
-          squares,
-          {
-            clipPath: "inset(100% 0% 0% 0%)",
-            duration: 1.2,
-            ease: "expo.inOut",
-            stagger: 0.1,
-          },
-          0.5
-        )
-        tl.from(
-          productLabels,
+          tagline,
           { y: 8, autoAlpha: 0, duration: 0.8, stagger: 0.05 },
-          1.2
+          0.7
         )
+        tl.from(cta, { y: 12, autoAlpha: 0, duration: 0.9 }, 0.9)
 
         // Feuilles : lancées depuis les bords, dans le désordre
-        tl.to(
+        if (sheets.length) tl.to(
           sheets,
           {
             intro: 1,
@@ -532,7 +537,12 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
 
       // On attend la police pour découper le titre au bon endroit
       let alive = true
-      document.fonts.ready.then(() => alive && context.add(intro))
+      // Le drapeau reste fermé jusqu'à ce que le brassard soit prêt (sans dépasser FLAG_MAX_WAIT)
+      const brassardReady = new Promise((resolve) => {
+        window.addEventListener("brassard:ready", resolve, { once: true })
+        setTimeout(resolve, FLAG_MAX_WAIT)
+      })
+      Promise.all([document.fonts.ready, brassardReady]).then(() => alive && context.add(intro))
 
       return () => {
         alive = false
@@ -551,13 +561,14 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
 
   return (
     // La page est plus haute que l'écran pour pouvoir scroller ; le bureau reste collé en haut.
-    <div ref={scrollRef} className="relative h-[200svh]">
+    <div ref={scrollRef} data-scroller className="relative h-[400svh]">
       <div
         ref={rootRef}
         className="group/desk sticky top-0 h-svh w-full overflow-hidden bg-desk select-none"
       >
         <div
           ref={stageRef}
+          data-stage
           className="group/stage absolute top-0 left-0 origin-top-left"
           style={{ width: LAYOUTS.desktop.width, height: LAYOUTS.desktop.height, perspective: 2600 }}
         >
@@ -613,6 +624,10 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
             </div>
           ))}
         </div>
+
+        {/* Drapeau de chargement : couvre la page dès le premier affichage */}
+        <div data-flag aria-hidden className="absolute inset-x-0 top-0 z-50 h-[calc(50%+1px)] bg-flag-blue" />
+        <div data-flag aria-hidden className="absolute inset-x-0 bottom-0 z-50 h-1/2 bg-flag-yellow" />
       </div>
     </div>
   )
