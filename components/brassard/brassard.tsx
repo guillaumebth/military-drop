@@ -33,7 +33,10 @@ export function Brassard() {
         fit()
         // Prévient la page : le drapeau de chargement peut s'ouvrir
         window.dispatchEvent(new Event("brassard:ready"))
-        const onResize = () => requestAnimationFrame(fit)
+        // Le canvas change de taille avec la page ; la fenêtre peut aussi changer sa seule échelle
+        const observer = new ResizeObserver(fit)
+        observer.observe(canvas)
+        const onResize = () => requestAnimationFrame(() => requestAnimationFrame(fit))
         window.addEventListener("resize", onResize)
 
         const progress = { open: 0 }
@@ -41,10 +44,11 @@ export function Brassard() {
           trigger: scroller,
           start: "top top",
           end: "bottom bottom",
-          scrub: 0.8,
+          scrub: 0.5,
           animation: gsap.to(progress, {
             open: 1,
-            ease: "none",
+            // L'ouverture démarre dès les premiers crans de scroll, puis se pose en douceur
+            ease: "power2.out",
             onUpdate: () => brassard.setOpen(progress.open),
           }),
         })
@@ -53,6 +57,7 @@ export function Brassard() {
         const appear = gsap.fromTo(canvas, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.8, ease: "power1.out" })
 
         cleanup = () => {
+          observer.disconnect()
           window.removeEventListener("resize", onResize)
           gsap.ticker.remove(tick)
           trigger.kill()

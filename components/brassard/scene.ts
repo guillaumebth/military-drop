@@ -18,11 +18,15 @@ const IDLE_ROTATION_SPEED = 0.55 // vitesse de la rotation
 const IDLE_FLOAT = 7 // amplitude du haut / bas (pixels de maquette)
 const IDLE_FLOAT_SPEED = 0.8 // vitesse du haut / bas
 const IDLE_WHEN_OPEN = 0.35 // part du mouvement conservée une fois le brassard à plat
-// Taille du brassard à l'écran, en pixels de maquette par mètre, et position de son centre
+// Taille du brassard à l'écran (pixels de maquette par mètre), pour l'espace libre de référence.
+// top = bas du texte d'accroche, bottom = distance entre le bouton et le bas de l'écran.
+// Le brassard se centre entre les deux et grandit si l'écran offre plus de place (jusqu'à MAX_GROW).
 const LAYOUTS = {
-  desktop: { closed: 2150, open: 2150, x: 720, y: 430 },
-  mobile: { closed: 1500, open: 840, x: 195, y: 410 },
+  desktop: { closed: 2150, open: 2150, top: 234, bottom: 140, freeSpace: 426 },
+  mobile: { closed: 1500, open: 840, top: 168, bottom: 140, freeSpace: 472 },
 }
+const MAX_GROW = 1.7
+const MAX_WIDTH = 0.9 // à plat, part maximale de la largeur de l'écran
 
 export type BrassardLayout = keyof typeof LAYOUTS
 
@@ -226,9 +230,13 @@ export async function createBrassard(canvas: HTMLCanvasElement) {
     armband.rotation.y = SWING * Math.sin(Math.PI * eased) + IDLE_ROTATION * sway * Math.sin(time * IDLE_ROTATION_SPEED)
 
     const place = LAYOUTS[layout]
+    const bottom = frame.height - place.bottom
+    const grow = Math.min(MAX_GROW, Math.max(1, (bottom - place.top) / place.freeSpace))
+    const closedSize = place.closed * grow
+    const openSize = Math.min(place.open * grow, (MAX_WIDTH * frame.width) / LENGTH)
     const float = IDLE_FLOAT * sway * Math.sin(time * IDLE_FLOAT_SPEED)
-    armband.scale.setScalar((place.closed + (place.open - place.closed) * eased) / 1000)
-    armband.position.set((place.x - frame.width / 2) / 1000, -(place.y + float - frame.height / 2) / 1000, 0)
+    armband.scale.setScalar((closedSize + (openSize - closedSize) * eased) / 1000)
+    armband.position.set(0, -((place.top + bottom) / 2 + float - frame.height / 2) / 1000, 0)
     renderer.render(scene, camera)
     dirty = false
   }

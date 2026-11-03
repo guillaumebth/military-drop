@@ -189,7 +189,8 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
       let marginY = 0
       const fit = () => {
         const { width, height } = root.getBoundingClientRect()
-        const next: Layout = width < MOBILE_BREAKPOINT ? "mobile" : "desktop"
+        // Mise en page mobile aussi sur les écrans en hauteur (tablette tenue droite)
+        const next: Layout = width < MOBILE_BREAKPOINT || width < height ? "mobile" : "desktop"
         if (next !== layout || !stage.dataset.layout) applyLayout(next)
         scale = Math.min(width / frame.width, height / frame.height)
         offsetX = (width - frame.width * scale) / 2
@@ -198,6 +199,14 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
 
         marginX = offsetX / scale
         marginY = offsetY / scale
+        // Le contenu déborde de la maquette pour occuper tout l'écran, sans vide autour
+        const page = stage.querySelector<HTMLElement>("[data-content]")
+        if (page) {
+          page.style.left = `${-marginX}px`
+          page.style.top = `${-marginY}px`
+          page.style.width = `${frame.width + marginX * 2}px`
+          page.style.height = `${frame.height + marginY * 2}px`
+        }
         sheets.forEach((s, i) => {
           const c = basePlacement(i)
           const edgeX = marginX * clamp((c.x - frame.width / 2) / (frame.width / 4), -1, 1)
@@ -561,7 +570,7 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
 
   return (
     // La page est plus haute que l'écran pour pouvoir scroller ; le bureau reste collé en haut.
-    <div ref={scrollRef} data-scroller className="relative h-[400svh]">
+    <div ref={scrollRef} data-scroller className="relative h-[250svh]">
       <div
         ref={rootRef}
         className="group/desk sticky top-0 h-svh w-full overflow-hidden bg-desk select-none"
