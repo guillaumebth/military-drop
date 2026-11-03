@@ -10,18 +10,21 @@ const covers = SHOW_COVERS ? allCovers : []
 
 // ─── Réglages de la physique ────────────────────────────────────────────────
 // Tout le « ressenti » du papier se règle ici.
-const WIND_STRENGTH = 0.11 // force du souffle de la souris
-const WIND_RADIUS = 260 // portée du souffle autour du curseur (en px de maquette)
-const WIND_SPIN = 0.018 // à quel point le souffle fait tourner les feuilles
 const RETURN_SPRING = 0.012 // vitesse de retour à la place d'origine
 const AIR_DRAG = 0.9 // freinage dans l'air (plus proche de 1 = plus flottant)
 const FLUTTER_SPRING = 0.045 // nervosité du battement des bords soulevés
 const FLUTTER_DAMPING = 0.72 // amortissement du battement
 const MAX_TILT = 12 // inclinaison maxi d'un bord soulevé (degrés)
-const HOVER_PEEL = 5 // inclinaison quand on survole une feuille (degrés)
+const HOVER_SCALE = 0.03 // agrandissement au survol (0.03 = 3 %)
+const HOVER_SPEED = 0.14 // vitesse de cet agrandissement
 const SLIDE_FRICTION = 0.92 // glissade d'une feuille lancée puis lâchée
 
 // ─── Drapeau de chargement ──────────────────────────────────────────────────
+// ─── Départ des articles au scroll ──────────────────────────────────────────
+const FLY_SCALE = 1.25 // agrandissement d'une feuille à l'arrivée, comme lancée vers l'écran
+const LEAVE_STAGGER = 0.08 // écart maxi entre la première et la dernière feuille qui part (0 à 1)
+const LEAVE_DURATION = 0.4 // durée du départ, en part de la longueur de scroll (0 à 1)
+
 const FLAG_MAX_WAIT = 4000 // attente maxi du brassard 3D avant d'ouvrir (millisecondes)
 const FLAG_DURATION = 1.1 // durée d'ouverture des deux bandes (secondes)
 const FLAG_CONTENT_DELAY = 0.55 // la page commence à apparaître après ce délai (secondes)
@@ -38,6 +41,8 @@ type Sheet = {
   vx: number
   vy: number
   vr: number
+  // survol : 0 = non survolée, 1 = survolée
+  hover: number
   // élévation (0 = posée, 1 = en l'air) et inclinaison 3D
   lift: number
   tiltX: number
@@ -85,10 +90,6 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
       const shadows = groups.map((g) =>
         g.querySelector<HTMLElement>("[data-shadow]")!
       )
-      const shines = groups.map((g) =>
-        g.querySelector<HTMLElement>("[data-shine]")!
-      )
-
       const sheets: Sheet[] = covers.map((c) => ({
         hx: c.x,
         hy: c.y,
@@ -99,6 +100,7 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
         vx: 0,
         vy: 0,
         vr: 0,
+        hover: 0,
         lift: 0,
         tiltX: 0,
         tiltY: 0,
@@ -109,7 +111,7 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
         sliding: false,
         intro: 0,
         leave: 0,
-        leaveDelay: Math.random() * 0.35,
+        leaveDelay: Math.random() * LEAVE_STAGGER,
         edgeX: 0,
         edgeY: 0,
         fromX: 0,
@@ -144,13 +146,6 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
           s.h = covers[i].h * frame.sheetScale
           papers[i].style.width = shadows[i].style.width = `${s.w}px`
           papers[i].style.height = shadows[i].style.height = `${s.h}px`
-          // chaque feuille arrive de l'extérieur, dans la direction de son bord
-          const dx = place.x - frame.width / 2
-          const dy = place.y - frame.height / 2
-          const len = Math.hypot(dx, dy) || 1
-          const distance = frame.width * (0.45 + Math.random() * 0.17)
-          s.fromX = (dx / len) * distance
-          s.fromY = (dy / len) * distance
         })
       }
 
@@ -167,7 +162,7 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
       // ─── Scroll : les feuilles quittent le bureau vers l'extérieur ─────────
       // En remontant, elles reviennent à leur place.
       const scroll = { progress: 0 }
-      const leaveEase = gsap.parseEase("power2.in")
+      const leaveEase = gsap.parseEase("power1.in")
       gsap.to(scroll, {
         progress: 1,
         ease: "none",
@@ -215,6 +210,20 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
           s.hy += edgeY - s.edgeY
           s.edgeX = edgeX
           s.edgeY = edgeY
+
+          // Trajet vers l'extérieur, dans la direction du bord le plus proche : assez long
+          // pour que la feuille (même agrandie et tournée) soit entièrement hors de l'écran
+          const fromCenterX = s.hx - frame.width / 2
+          const fromCenterY = s.hy - frame.height / 2
+          const length = Math.hypot(fromCenterX, fromCenterY) || 1
+          const dirX = fromCenterX / length
+          const dirY = fromCenterY / length
+          const reach = (Math.hypot(s.w, s.h) / 2) * FLY_SCALE
+          const travelX = dirX ? (frame.width / 2 + marginX + reach - Math.abs(fromCenterX)) / Math.abs(dirX) : Infinity
+          const travelY = dirY ? (frame.height / 2 + marginY + reach - Math.abs(fromCenterY)) / Math.abs(dirY) : Infinity
+          const travel = Math.min(travelX, travelY)
+          s.fromX = dirX * travel
+          s.fromY = dirY * travel
         })
       }
       fit()
@@ -222,15 +231,7 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
       resizeObserver.observe(root)
 
       // ─── Souris ────────────────────────────────────────────────────────────
-      const mouse = {
-        x: -9999,
-        y: -9999,
-        dx: 0,
-        dy: 0,
-        vx: 0,
-        vy: 0,
-        inside: false,
-      }
+      const mouse = { x: -9999, y: -9999 }
       let hovered = -1
       let dragged = -1
       const grab = { x: 0, y: 0 }
@@ -245,16 +246,10 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
 
       const onMove = (e: PointerEvent) => {
         const p = toStage(e)
-        if (mouse.inside) {
-          mouse.dx += p.x - mouse.x
-          mouse.dy += p.y - mouse.y
-        }
         mouse.x = p.x
         mouse.y = p.y
-        mouse.inside = true
       }
       const onLeave = () => {
-        mouse.inside = false
         hovered = -1
       }
 
@@ -309,18 +304,11 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
       const tick = () => {
         const dt = Math.min(gsap.ticker.deltaRatio(60), 3)
 
-        // Vitesse de la souris lissée = force et direction du « vent »
-        mouse.vx = mouse.vx * 0.8 + (mouse.dx / dt) * 0.2
-        mouse.vy = mouse.vy * 0.8 + (mouse.dy / dt) * 0.2
-        mouse.dx = mouse.dy = 0
-        const speed = Math.hypot(mouse.vx, mouse.vy)
-
         sheets.forEach((s, i) => {
           // chaque feuille part avec un léger décalage, pour un départ désordonné
           s.leave = leaveEase(
-            clamp((scroll.progress - s.leaveDelay) / 0.65, 0, 1)
+            clamp((scroll.progress - s.leaveDelay) / LEAVE_DURATION, 0, 1)
           )
-          const layer = order.indexOf(i) / (order.length - 1) // 0 = dessous, 1 = dessus
           let liftTarget = 0
           let tiltXTarget = 0
           let tiltYTarget = 0
@@ -355,66 +343,6 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
               s.hy = clamp(s.hy, -marginY, frame.height + marginY)
               if (Math.hypot(s.sx, s.sy) < 0.05) s.sliding = false
             }
-
-            // ── Souffle de la souris ──
-            const cx = s.hx + s.ox
-            const cy = s.hy + s.oy
-            const dx = cx - mouse.x
-            const dy = cy - mouse.y
-            const dist = Math.hypot(dx, dy) || 1
-            const radius = WIND_RADIUS + Math.max(s.w, s.h) * 0.35
-            let falloff = clamp(1 - dist / radius, 0, 1)
-            falloff *= falloff
-            // Les feuilles du dessus prennent plus le vent que celles du dessous
-            const exposure =
-              reducedMotion || !mouse.inside
-                ? 0
-                : falloff * (0.35 + 0.65 * layer) * s.intro * (1 - s.leave)
-
-            if (exposure > 0 && speed > 0.2) {
-              const gust = clamp(speed, 0, 60)
-              const dirX = mouse.vx / speed
-              const dirY = mouse.vy / speed
-              // poussée dans le sens du mouvement + un peu vers l'extérieur
-              s.vx +=
-                (dirX * gust * WIND_STRENGTH + (dx / dist) * gust * 0.03) *
-                exposure *
-                dt
-              s.vy +=
-                (dirY * gust * WIND_STRENGTH + (dy / dist) * gust * 0.03) *
-                exposure *
-                dt
-              // rotation : le vent qui passe à côté d'une feuille la fait pivoter
-              s.vr +=
-                ((dx * mouse.vy - dy * mouse.vx) / radius) *
-                WIND_SPIN *
-                exposure *
-                dt
-
-              // le bord face au vent se soulève
-              const lx = dirX * cos + dirY * sin
-              const ly = -dirX * sin + dirY * cos
-              const strength = clamp(gust * exposure * 0.09, 0, 1)
-              liftTarget = strength
-              tiltYTarget = lx * strength * MAX_TILT
-              tiltXTarget = -ly * strength * MAX_TILT
-            }
-
-            // ── Survol : on « décolle » doucement le coin sous le curseur ──
-            if (
-              i === hovered &&
-              dragged < 0 &&
-              !reducedMotion &&
-              s.intro > 0.99
-            ) {
-              const mx = mouse.x - cx
-              const my = mouse.y - cy
-              const lx = (mx * cos + my * sin) / (s.w / 2)
-              const ly = (-mx * sin + my * cos) / (s.h / 2)
-              tiltYTarget += -clamp(lx, -1, 1) * HOVER_PEEL
-              tiltXTarget += clamp(ly, -1, 1) * HOVER_PEEL
-              liftTarget = Math.max(liftTarget, 0.18)
-            }
           }
 
           // ── Ressorts : chaque feuille revient à sa place ──
@@ -446,6 +374,10 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
           s.lift +=
             (liftTarget - s.lift) * (liftTarget > s.lift ? 0.2 : 0.06) * dt
 
+          // ── Survol : la feuille grandit très légèrement ──
+          const hoverTarget = i === hovered && dragged < 0 && s.leave === 0 ? 1 : 0
+          s.hover += (hoverTarget - s.hover) * HOVER_SPEED * dt
+
           // ── Rendu ──
           const away = 1 - s.intro // 1 = encore en vol pendant l'intro
           const fly = Math.max(away, s.leave * 1.4) // distance vers l'extérieur (intro ou scroll)
@@ -455,18 +387,14 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
           const lift = clamp(Math.max(s.lift, fly), 0, 1)
           papers[i].style.transform =
             `translate3d(${x}px, ${y}px, ${lift * 40}px) rotate(${r}deg) ` +
-            `rotateX(${s.tiltX}deg) rotateY(${s.tiltY}deg) scale(${1 + s.lift * 0.035 + away * 0.25})`
-          papers[i].style.opacity = String(clamp(s.intro * 4, 0, 1))
+            `rotateX(${s.tiltX}deg) rotateY(${s.tiltY}deg) scale(${1 + s.lift * 0.035 + s.hover * HOVER_SCALE + away * (FLY_SCALE - 1)})`
+          // Aucun fondu : la feuille entre et sort uniquement par les bords de l'écran
+          papers[i].style.opacity = "1"
+          papers[i].style.visibility = s.leave < 1 ? "visible" : "hidden"
           shadows[i].style.transform =
             `translate3d(${x + lift * 4}px, ${y + lift * 6}px, 0) rotate(${r}deg) scale(${1 + lift * 0.01})`
           shadows[i].style.opacity = String(
-            lift * 0.12 * clamp(s.intro * 4, 0, 1)
-          )
-          const tiltAmount = Math.hypot(s.tiltX, s.tiltY)
-          shines[i].style.opacity = String(clamp(tiltAmount / 18, 0, 0.9))
-          shines[i].style.setProperty(
-            "--shine-angle",
-            `${Math.atan2(s.tiltX, -s.tiltY)}rad`
+            lift * 0.12
           )
         })
       }
@@ -618,16 +546,6 @@ export function PaperDesk({ children }: { children?: React.ReactNode }) {
                   loading="eager"
                   sizes={`${Math.round(cover.w * 1.5)}px`}
                   className="object-cover object-top"
-                />
-                {/* Reflet de lumière quand un bord se soulève */}
-                <div
-                  data-shine
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0 opacity-0"
-                  style={{
-                    background:
-                      "linear-gradient(var(--shine-angle, 0rad), rgb(255 255 255 / 0.45), transparent 45%, rgb(0 0 0 / 0.28))",
-                  }}
                 />
               </div>
             </div>
